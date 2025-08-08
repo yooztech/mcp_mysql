@@ -1,0 +1,2 @@
+[console_scripts]
+yooztech_mcp_mysql = app:main
