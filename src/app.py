@@ -207,6 +207,136 @@ class MySQLGuard:
             )
             return [r[0] for r in cur.fetchall()]
 
+    def get_table_schema(self, table: str, db: Optional[str] = None) -> Dict[str, Any]:
+        """返回指定表的结构信息：列定义、主键、索引与表注释。
+
+        返回示例：
+        {
+            "db": "mydb",
+            "table": "users",
+            "comment": "table comment",
+            "columns": [
+                {
+                    "name": "id",
+                    "data_type": "int",
+                    "column_type": "int(11)",
+                    "nullable": false,
+                    "default": null,
+                    "key": "PRI",
+                    "extra": "auto_increment",
+                    "comment": "primary key",
+                    "ordinal_position": 1
+                },
+                ...
+            ],
+            "primary_key": ["id"],
+            "indexes": [
+                {"name": "idx_email", "columns": ["email"], "unique": false, "index_type": "BTREE"}
+            ]
+        }
+        """
+        dbname = self._resolve_database(db)
+
+        # 列定义
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COLUMN_NAME, DATA_TYPE, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT,
+                       COLUMN_KEY, EXTRA, COLUMN_COMMENT, ORDINAL_POSITION
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s
+                ORDER BY ORDINAL_POSITION
+                """,
+                (dbname, table),
+            )
+            col_rows = cur.fetchall()
+
+        if not col_rows:
+            raise ValueError(f"表不存在或无列: {table}")
+
+        columns: List[Dict[str, Any]] = []
+        primary_key_cols: List[str] = []
+        for (
+            column_name,
+            data_type,
+            column_type,
+            is_nullable,
+            column_default,
+            column_key,
+            extra,
+            column_comment,
+            ordinal_position,
+        ) in col_rows:
+            nullable_flag = (str(is_nullable).upper() == "YES")
+            columns.append(
+                {
+                    "name": column_name,
+                    "data_type": data_type,
+                    "column_type": column_type,
+                    "nullable": nullable_flag,
+                    "default": column_default,
+                    "key": column_key,
+                    "extra": extra,
+                    "comment": column_comment,
+                    "ordinal_position": int(ordinal_position),
+                }
+            )
+            if str(column_key).upper() == "PRI":
+                primary_key_cols.append(column_name)
+
+        # 表注释
+        table_comment: Optional[str] = None
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT TABLE_COMMENT
+                FROM information_schema.TABLES
+                WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s
+                """,
+                (dbname, table),
+            )
+            row = cur.fetchone()
+            if row:
+                table_comment = row[0]
+
+        # 索引信息（含 PRIMARY）
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT INDEX_NAME, NON_UNIQUE, INDEX_TYPE, SEQ_IN_INDEX, COLUMN_NAME
+                FROM information_schema.STATISTICS
+                WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s
+                ORDER BY INDEX_NAME, SEQ_IN_INDEX
+                """,
+                (dbname, table),
+            )
+            idx_rows = cur.fetchall()
+
+        indexes_map: Dict[str, Dict[str, Any]] = {}
+        for index_name, non_unique, index_type, seq_in_index, col_name in idx_rows:
+            if str(index_name).upper() == "PRIMARY":
+                # 以 STATISTICS 为准，覆盖 primary_key_cols 的顺序
+                if col_name not in primary_key_cols:
+                    primary_key_cols.append(col_name)
+                continue
+            if index_name not in indexes_map:
+                indexes_map[index_name] = {
+                    "name": index_name,
+                    "columns": [],
+                    "unique": (int(non_unique) == 0),
+                    "index_type": index_type,
+                }
+            indexes_map[index_name]["columns"].append(col_name)
+
+        return {
+            "db": dbname,
+            "table": table,
+            "comment": table_comment,
+            "columns": columns,
+            "primary_key": primary_key_cols,
+            "indexes": list(indexes_map.values()),
+        }
+
     def select_rows(
         self,
         table: str,
@@ -298,6 +428,12 @@ async def infer_database(project_root: Optional[str] = None, include_evidence: b
 async def list_tables(db: Optional[str] = None) -> List[str]:
     """列出数据库中的所有表。db 省略时，使用已推断的库或自动推断。"""
     return guard.list_tables(db)
+
+
+@server.tool()
+async def get_table_schema(table: str, db: Optional[str] = None) -> Dict[str, Any]:
+    """获取表结构：列定义、主键、索引。db 省略时自动推断。"""
+    return guard.get_table_schema(table, db)
 
 
 @server.tool()

@@ -4,6 +4,7 @@
 - `list_databases()`：列出当前账号可访问的非系统库
 - `infer_database(project_root=None, include_evidence=false)`：根据项目内容推断库名（默认仅返回 `{ db }`，可选返回最小化证据统计，不含文件路径/内容）
 - `list_tables(db=None)`：列出库内表（未传 `db` 时使用已推断库或自动选择）
+- `get_table_schema(table, db=None)`：获取表结构（列定义、主键、索引、表注释）
 - `select_rows(table, db=None, columns=None, where=None, order_by=None, limit=100)`：从库表安全查询
 
 ### 安全设计
