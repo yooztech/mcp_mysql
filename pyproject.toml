@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yooztech_mcp_mysql"
-version = "0.1.1"
+version = "0.1.2"
 description = "MCP server for MySQL (read-only, database-scoped)"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "Your Name" }]
 dependencies = [
   "mcp>=1.2.0",

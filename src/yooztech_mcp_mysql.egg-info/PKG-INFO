@@ -1,9 +1,9 @@
 Metadata-Version: 2.4
 Name: yooztech_mcp_mysql
-Version: 0.1.1
+Version: 0.1.2
 Summary: MCP server for MySQL (read-only, database-scoped)
 Author: Your Name
-License: MIT
+License-Expression: MIT
 Requires-Python: >=3.10
 Description-Content-Type: text/markdown
 License-File: LICENSE
